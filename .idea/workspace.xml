@@ -13,6 +13,14 @@
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Jupyter Notebook" />
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
   <component name="Git.Settings">
     <option name="PREVIOUS_COMMIT_AUTHORS">
       <list>
@@ -48,7 +56,7 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/Users/ransin/PycharmProjects/ai_word_search_creator",
+    "last_opened_file_path": "C:/Users/ransin/PycharmProjects/ai_word_search_creator/wordsearch",
     "settings.editor.selected.configurable": "preferences.editor"
   },
   "keyToStringList": {
@@ -61,6 +69,7 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\ransin\PycharmProjects\ai_word_search_creator\wordsearch" />
       <recent name="C:\Users\ransin\PycharmProjects\ai_word_search_creator" />
     </key>
   </component>
@@ -114,7 +123,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791581842348</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="initial commit">
+      <option name="closed" value="true" />
+      <created>1791581977593</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1791581977593</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
