@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from wordsearch.generate import generate_populated_wordsearch
+from wordsearch.generate import generate_populated_wordsearch, UnsuitableCategoryError
 from wordsearch.grid import word_fits_from
 from wordsearch.directions import DIRECTIONS, ALLOWED_DIRECTIONS
 
@@ -50,6 +50,9 @@ def create_puzzle(req: PuzzleRequest):
         result = generate_populated_wordsearch(
             req.category, GRID_SIZE[difficulty], difficulty, WORD_COUNT[difficulty]
         )
+    except UnsuitableCategoryError:
+        logger.info("Rejected unsuitable category: %r", req.category)
+        raise HTTPException(status_code=400, detail="That category isn't suitable for a word search. Please choose another.")
     except Exception:
         logger.exception("Puzzle generation failed")
         raise HTTPException(status_code=502, detail="Couldn't generate the puzzle. Please try again.")

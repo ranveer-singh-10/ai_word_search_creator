@@ -167,13 +167,12 @@
     }
     .words h2 { margin: 0 0 12px; font-size: 1.1rem; }
     .words .progress { margin: -8px 0 12px; color: var(--muted); font-size: 0.875rem; }
-    .words li.found strong { text-decoration: line-through; color: var(--muted); }
-    .words li.found span { opacity: 0.6; }
     .words ul { margin: 0; padding: 0; list-style: none; }
     .words li { padding: 6px 0; border-top: 1px solid var(--border); }
     .words li:first-child { border-top: 0; }
-    .words strong { display: block; letter-spacing: 0.05em; }
-    .words span { color: var(--muted); font-size: 0.875rem; }
+    .words ul.show-words li { font-weight: 600; letter-spacing: 0.05em; }
+    .words ul.show-descriptions li { font-size: 0.95rem; }
+    .words li.found { text-decoration: line-through; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -197,6 +196,14 @@
         </select>
       </div>
 
+      <div class="field">
+        <label for="show">Show</label>
+        <select id="show" name="show">
+          <option value="words">Words</option>
+          <option value="descriptions">Descriptions</option>
+        </select>
+      </div>
+
       <label class="toggle">
         <input id="dynamic" name="dynamic" type="checkbox">
         Dynamic mode
@@ -210,7 +217,7 @@
     <section id="puzzle" class="puzzle" hidden>
       <div id="grid" class="grid" role="grid" aria-label="Word search grid"></div>
       <div class="words">
-        <h2>Words to find</h2>
+        <h2 id="list-heading">Words to find</h2>
         <p id="progress" class="progress" aria-live="polite"></p>
         <ul id="word-list"></ul>
       </div>
@@ -225,6 +232,8 @@
     const gridEl = document.getElementById("grid");
     const wordListEl = document.getElementById("word-list");
     const progressEl = document.getElementById("progress");
+    const listHeadingEl = document.getElementById("list-heading");
+    const showSelect = document.getElementById("show");
 
     // Puzzle state: cells[row][col] are the grid elements; each word has
     // {word, description, start: [row, col], end: [row, col], found, item}.
@@ -262,19 +271,25 @@
     }
 
     function drawWordList(list) {
-      wordListEl.replaceChildren();
-      words = list.map((entry) => {
-        const item = document.createElement("li");
-        const wordEl = document.createElement("strong");
-        wordEl.textContent = entry.word;
-        const descEl = document.createElement("span");
-        descEl.textContent = entry.description;
-        item.append(wordEl, descEl);
-        wordListEl.appendChild(item);
-        return { ...entry, found: false, item };
-      });
+      words = list.map((entry) => ({ ...entry, found: false, item: document.createElement("li") }));
+      renderWordList();
       updateProgress();
     }
+
+    // Each list item shows either the word or its description, never both,
+    // depending on the "Show" option. Found items stay crossed out in either mode.
+    function renderWordList() {
+      const showWords = showSelect.value === "words";
+      listHeadingEl.textContent = showWords ? "Words to find" : "Clues";
+      wordListEl.className = showWords ? "show-words" : "show-descriptions";
+      for (const entry of words) {
+        entry.item.textContent = showWords ? entry.word : entry.description;
+        entry.item.classList.toggle("found", entry.found);
+      }
+      wordListEl.replaceChildren(...words.map((entry) => entry.item));
+    }
+
+    showSelect.addEventListener("change", renderWordList);
 
     function updateProgress() {
       const found = words.filter((w) => w.found).length;

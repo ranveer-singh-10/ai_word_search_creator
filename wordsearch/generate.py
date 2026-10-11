@@ -14,10 +14,16 @@ logger = logging.getLogger(__name__)
 ALLOWED_LETTERS = set(string.ascii_uppercase)
 DEFAULT_MODEL = "claude-haiku-5-5"
 
+
+class UnsuitableCategoryError(Exception):
+    """The category asks for content that isn't suitable for children."""
+
+
 # The API guarantees the reply matches this schema, so there is no need to strip code fences.
 WORDS_SCHEMA = {
     "type": "object",
     "properties": {
+        "category_suitable": {"type": "boolean"},
         "words": {
             "type": "array",
             "items": {
@@ -31,7 +37,7 @@ WORDS_SCHEMA = {
             },
         }
     },
-    "required": ["words"],
+    "required": ["category_suitable", "words"],
     "additionalProperties": False,
 }
 
@@ -40,7 +46,12 @@ def generate_words(category, difficulty, count=10, max_length=12, model=DEFAULT_
         "You generate words for word search puzzles. "
         "Easy difficulty means common words of 3–6 letters, hard means less common words of 7 letters or more, "
         "and medium means a mix of both. "
-        "Include a short description for each word."
+        "Include a short description for each word.\n\n"
+        "The puzzles are played by children, so every word and description must be suitable for a young audience. "
+        "Never include racist, sexist, homophobic or otherwise derogatory words or slurs, swear words, "
+        "sexual content, or anything cruel, hateful, violent or harmful towards children. "
+        "If the category asks for that kind of content, or can only be answered with it, "
+        "set category_suitable to false and return an empty word list. Otherwise set category_suitable to true."
     )
 
     user_prompt = (
@@ -61,11 +72,16 @@ def generate_words(category, difficulty, count=10, max_length=12, model=DEFAULT_
         messages=[{"role": "user", "content": user_prompt}],
     )
 
+    if response.stop_reason == "refusal":
+        raise UnsuitableCategoryError(category)
     if response.stop_reason != "end_turn":
         raise RuntimeError(f"Word generation stopped early: {response.stop_reason}")
 
     text = next(block.text for block in response.content if block.type == "text")
-    return {"words": json.loads(text)["words"], "usage": response.usage}
+    data = json.loads(text)
+    if not data["category_suitable"]:
+        raise UnsuitableCategoryError(category)
+    return {"words": data["words"], "usage": response.usage}
 
 
 # Keep only words that can go in the grid: letters A-Z only, the right length, no duplicates.

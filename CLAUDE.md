@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Don't change `wordsearch/generate.py` or `wordsearch/grid.py` without asking, and explain any change.
 - Keep the front end as a single `web/index.html` with HTML, CSS and JavaScript.
 - Use UK English.
+- Puzzles are for children. Never weaken the content rule in `generate_words`' system prompt (no racist, derogatory, sexual or other content harmful to children), and keep unsuitable categories rejected with a 400 via `UnsuitableCategoryError`.
 
 ## Commands
 

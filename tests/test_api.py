@@ -77,7 +77,7 @@ def test_placements_spell_each_word(api, difficulty):
 
 
 def test_generate_words_parses_structured_output():
-    payload = {"words": [{"word": "COMET", "description": "Icy body"}]}
+    payload = {"category_suitable": True, "words": [{"word": "COMET", "description": "Icy body"}]}
     with patch.object(generate.client.messages, "create",
                       return_value=fake_response(json.dumps(payload))) as mock:
         result = generate.generate_words("Space", "easy", 5, max_length=8)
@@ -92,6 +92,30 @@ def test_generate_words_raises_when_cut_off():
                       return_value=fake_response('{"words": [', stop_reason="max_tokens")):
         with pytest.raises(RuntimeError):
             generate.generate_words("Space", "easy")
+
+
+def test_unsuitable_category_returns_400(api):
+    payload = {"category_suitable": False, "words": []}
+    with patch.object(generate.client.messages, "create", return_value=fake_response(json.dumps(payload))):
+        resp = api.post("/api/puzzle", json={"category": "something nasty"})
+    assert resp.status_code == 400
+    assert "isn't suitable" in resp.json()["detail"]
+
+
+def test_refusal_returns_400(api):
+    with patch.object(generate.client.messages, "create",
+                      return_value=fake_response("", stop_reason="refusal")):
+        resp = api.post("/api/puzzle", json={"category": "something nasty"})
+    assert resp.status_code == 400
+
+
+def test_prompt_includes_child_safety_rule():
+    payload = {"category_suitable": True, "words": [{"word": "COMET", "description": "Icy body"}]}
+    with patch.object(generate.client.messages, "create",
+                      return_value=fake_response(json.dumps(payload))) as mock:
+        generate.generate_words("Space", "easy")
+    system = mock.call_args.kwargs["system"]
+    assert "children" in system and "derogatory" in system
 
 
 def test_generation_failure_returns_502(api):
