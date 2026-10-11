@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -6,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from wordsearch.generate import generate_populated_wordsearch, UnsuitableCategoryError
+from wordsearch.generate import generate_populated_wordsearch, UnsuitableCategoryError, DEFAULT_MODEL
 from wordsearch.grid import word_fits_from
 from wordsearch.directions import DIRECTIONS, ALLOWED_DIRECTIONS
 
@@ -18,7 +19,17 @@ BASE_DIR = Path(__file__).resolve().parent
 GRID_SIZE = {"easy": 8, "medium": 10, "hard": 12}
 WORD_COUNT = {"easy": 8, "medium": 10, "hard": 12}
 
+# US dollars per million (input, output) tokens. Thinking tokens are billed as output.
+# Check https://www.anthropic.com/pricing if you change DEFAULT_MODEL.
+PRICE_PER_MILLION = {"claude-haiku-5-5": (0.10, 0.50)}
+
 app = FastAPI()
+
+
+def puzzle_cost(usage, model=DEFAULT_MODEL):
+    """Cost in US dollars of one Claude call, from its token usage."""
+    input_price, output_price = PRICE_PER_MILLION[model]
+    return (usage.input_tokens * input_price + usage.output_tokens * output_price) / 1_000_000
 
 
 def find_word(grid, word, directions):
@@ -46,6 +57,7 @@ def create_puzzle(req: PuzzleRequest):
     difficulty = req.difficulty
 
     # Ask Claude for words, place them and fill the grid.
+    started = time.perf_counter()
     try:
         result = generate_populated_wordsearch(
             req.category, GRID_SIZE[difficulty], difficulty, WORD_COUNT[difficulty]
@@ -57,9 +69,18 @@ def create_puzzle(req: PuzzleRequest):
         logger.exception("Puzzle generation failed")
         raise HTTPException(status_code=502, detail="Couldn't generate the puzzle. Please try again.")
 
-    # Log token usage on the server (useful for cost tracking; not sent to the browser).
+    seconds = time.perf_counter() - started
+
+    # Generation stats, logged and shown on the page.
     usage = result["llm_response"]["usage"]
-    logger.info("Tokens used: %s in, %s out", usage.input_tokens, usage.output_tokens)
+    stats = {
+        "model": DEFAULT_MODEL,
+        "seconds": round(seconds, 2),
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cost_usd": puzzle_cost(usage),
+    }
+    logger.info("Puzzle stats: %s", stats)
 
     # Only return words that really made it into the grid, so the puzzle is always solvable.
     # Each word carries its start and end cells so the page can check the player's selection.
@@ -73,7 +94,7 @@ def create_puzzle(req: PuzzleRequest):
     if not words:
         raise HTTPException(status_code=500, detail="Couldn't fit the words into the grid. Please try again.")
 
-    return {"grid": grid, "words": words}
+    return {"grid": grid, "words": words, "stats": stats}
 
 
 # Serves the web page. Must come after the API routes, because "/" matches everything.

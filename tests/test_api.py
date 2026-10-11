@@ -76,6 +76,22 @@ def test_placements_spell_each_word(api, difficulty):
         assert letters == item["word"]
 
 
+def test_response_includes_stats(api):
+    usage = SimpleNamespace(input_tokens=1_000_000, output_tokens=2_000_000)
+    with patch.object(generate, "generate_words", return_value={
+        "words": [{"word": "COMET", "description": "Icy body"}], "usage": usage,
+    }):
+        resp = api.post("/api/puzzle", json={"category": "Space"})
+
+    stats = resp.json()["stats"]
+    assert stats["model"] == generate.DEFAULT_MODEL
+    assert stats["input_tokens"] == 1_000_000
+    assert stats["output_tokens"] == 2_000_000
+    assert stats["seconds"] >= 0
+    input_price, output_price = server.PRICE_PER_MILLION[generate.DEFAULT_MODEL]
+    assert stats["cost_usd"] == pytest.approx(input_price + 2 * output_price)
+
+
 def test_generate_words_parses_structured_output():
     payload = {"category_suitable": True, "words": [{"word": "COMET", "description": "Icy body"}]}
     with patch.object(generate.client.messages, "create",
