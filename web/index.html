@@ -1,1 +1,298 @@
-<h1>Word Search coming soon</h1>
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word Search Creator</title>
+  <style>
+    :root {
+      --bg: #f6f5f1;
+      --surface: #ffffff;
+      --text: #1f2328;
+      --muted: #5f6670;
+      --border: #d8d6cf;
+      --accent: #2f6f5e;
+      --accent-text: #ffffff;
+      --error-bg: #fbeaea;
+      --error-text: #8a1f1f;
+      --cell-bg: #fbfaf7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181b;
+        --surface: #1f2226;
+        --text: #e6e6e3;
+        --muted: #9aa1a9;
+        --border: #34383e;
+        --accent: #5fb39b;
+        --accent-text: #0f1a17;
+        --error-bg: #3a1d1d;
+        --error-text: #f2b8b8;
+        --cell-bg: #25292e;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 16px 48px;
+    }
+
+    h1 { margin: 0 0 4px; font-size: 1.75rem; }
+    .intro { margin: 0 0 24px; color: var(--muted); }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field.grow { flex: 1 1 220px; }
+
+    label { font-size: 0.875rem; font-weight: 600; }
+
+    input[type="text"], select {
+      font: inherit;
+      padding: 8px 10px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+    button {
+      font: inherit;
+      font-weight: 600;
+      padding: 9px 20px;
+      color: var(--accent-text);
+      background: var(--accent);
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+
+    input:focus-visible, select:focus-visible, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .status { margin: 16px 0 0; color: var(--muted); }
+    .status.error {
+      padding: 10px 12px;
+      color: var(--error-text);
+      background: var(--error-bg);
+      border-radius: 6px;
+    }
+    .status:empty { display: none; }
+
+    .puzzle {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .puzzle[hidden] { display: none; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(var(--size), 1fr);
+      width: min(100%, 560px);
+      aspect-ratio: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      gap: 2px;
+      user-select: none;
+    }
+
+    .cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--cell-bg);
+      border-radius: 4px;
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-weight: 600;
+      font-size: clamp(0.75rem, calc(70vw / var(--size)), 1.4rem);
+    }
+
+    .words {
+      flex: 1 1 240px;
+      margin: 0;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .words h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    .words ul { margin: 0; padding: 0; list-style: none; }
+    .words li { padding: 6px 0; border-top: 1px solid var(--border); }
+    .words li:first-child { border-top: 0; }
+    .words strong { display: block; letter-spacing: 0.05em; }
+    .words span { color: var(--muted); font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Word Search Creator</h1>
+    <p class="intro">Pick a category and difficulty, and Claude will choose the words for your puzzle.</p>
+
+    <form id="puzzle-form">
+      <div class="field grow">
+        <label for="category">Category</label>
+        <input id="category" name="category" type="text" required maxlength="50"
+               placeholder="e.g. Space, Cars, Fruit" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="difficulty">Difficulty</label>
+        <select id="difficulty" name="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+
+      <label class="toggle">
+        <input id="dynamic" name="dynamic" type="checkbox">
+        Dynamic mode
+      </label>
+
+      <button id="submit" type="submit">Create puzzle</button>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="puzzle" class="puzzle" hidden>
+      <div id="grid" class="grid" role="grid" aria-label="Word search grid"></div>
+      <div class="words">
+        <h2>Words to find</h2>
+        <ul id="word-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("puzzle-form");
+    const submitButton = document.getElementById("submit");
+    const statusEl = document.getElementById("status");
+    const puzzleEl = document.getElementById("puzzle");
+    const gridEl = document.getElementById("grid");
+    const wordListEl = document.getElementById("word-list");
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function drawGrid(grid) {
+      gridEl.replaceChildren();
+      gridEl.style.setProperty("--size", grid.length);
+
+      for (const row of grid) {
+        const rowEl = document.createElement("div");
+        rowEl.setAttribute("role", "row");
+        rowEl.style.display = "contents";
+        for (const letter of row) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.setAttribute("role", "gridcell");
+          cell.textContent = letter;
+          rowEl.appendChild(cell);
+        }
+        gridEl.appendChild(rowEl);
+      }
+    }
+
+    function drawWordList(words) {
+      wordListEl.replaceChildren();
+      for (const { word, description } of words) {
+        const item = document.createElement("li");
+        const wordEl = document.createElement("strong");
+        wordEl.textContent = word;
+        const descEl = document.createElement("span");
+        descEl.textContent = description;
+        item.append(wordEl, descEl);
+        wordListEl.appendChild(item);
+      }
+    }
+
+    // FastAPI sends errors as {detail: "..."} for HTTPException,
+    // or {detail: [{msg: "..."}]} when the request fails validation.
+    function errorMessage(body, status) {
+      const detail = body && body.detail;
+      if (typeof detail === "string") return detail;
+      if (Array.isArray(detail) && detail.length) return detail[0].msg;
+      return `Something went wrong (error ${status}). Please try again.`;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        category: form.category.value.trim(),
+        difficulty: form.difficulty.value,
+        dynamic: form.dynamic.checked,
+      };
+      if (!payload.category) {
+        setStatus("Please enter a category.", true);
+        return;
+      }
+
+      submitButton.disabled = true;
+      setStatus("Creating your puzzle…");
+
+      try {
+        const response = await fetch("/api/puzzle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          setStatus(errorMessage(body, response.status), true);
+          return;
+        }
+
+        drawGrid(body.grid);
+        drawWordList(body.words);
+        puzzleEl.hidden = false;
+        setStatus("");
+      } catch {
+        setStatus("Couldn't reach the server. Is it running?", true);
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
