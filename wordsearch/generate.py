@@ -52,12 +52,12 @@ def generate_populated_wordsearch(category, size, difficulty, word_count):
 
     return {"word_list": word_list, "grid": grid, "llm_response": result}
 
-result = generate_populated_wordsearch("Cars", 12, "hard", 10)
-print("------------------------------")
-print_grid(result["grid"])
-print("------------------------------")
-print(result["word_list"])
-print("------------------------------")
-print(result)
+#result = generate_populated_wordsearch("Cars", 12, "hard", 10)
+#print("------------------------------")
+#print_grid(result["grid"])
+#print("------------------------------")
+#print(result["word_list"])
+#print("------------------------------")
+#print(result)
 
 
