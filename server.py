@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from wordsearch.generate import generate_populated_wordsearch
-from wordsearch.grid import check_word_in_grid
+from wordsearch.grid import word_fits_from
 from wordsearch.directions import DIRECTIONS, ALLOWED_DIRECTIONS
 
 logger = logging.getLogger("uvicorn.error")
@@ -19,6 +19,17 @@ GRID_SIZE = {"easy": 8, "medium": 10, "hard": 12}
 WORD_COUNT = {"easy": 8, "medium": 10, "hard": 12}
 
 app = FastAPI()
+
+
+def find_word(grid, word, directions):
+    """Return the [row, col] start and end cells of word in grid, or None if it isn't there."""
+    for row in range(len(grid)):
+        for col in range(len(grid[0])):
+            for row_step, col_step in directions:
+                if word_fits_from(grid, word, (row, col), (row_step, col_step)):
+                    last = len(word) - 1
+                    return {"start": [row, col], "end": [row + row_step * last, col + col_step * last]}
+    return None
 
 
 class PuzzleRequest(BaseModel):
@@ -48,12 +59,14 @@ def create_puzzle(req: PuzzleRequest):
     logger.info("Tokens used: %s in, %s out", usage.input_tokens, usage.output_tokens)
 
     # Only return words that really made it into the grid, so the puzzle is always solvable.
+    # Each word carries its start and end cells so the page can check the player's selection.
     grid = result["grid"]
     directions = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
-    words = [
-        item for item in result["words"]
-        if check_word_in_grid(grid, item["word"], directions)
-    ]
+    words = []
+    for item in result["words"]:
+        placement = find_word(grid, item["word"], directions)
+        if placement:
+            words.append({**item, **placement})
     if not words:
         raise HTTPException(status_code=500, detail="Couldn't fit the words into the grid. Please try again.")
 

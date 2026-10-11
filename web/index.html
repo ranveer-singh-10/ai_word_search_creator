@@ -16,6 +16,10 @@
       --error-bg: #fbeaea;
       --error-text: #8a1f1f;
       --cell-bg: #fbfaf7;
+      --select-bg: #f3d27a;
+      --select-text: #1f2328;
+      --found-bg: #b9dccf;
+      --found-text: #12352b;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -29,6 +33,10 @@
         --error-bg: #3a1d1d;
         --error-text: #f2b8b8;
         --cell-bg: #25292e;
+        --select-bg: #8a6d1f;
+        --select-text: #fff8e6;
+        --found-bg: #2e5e50;
+        --found-text: #e3f5ee;
       }
     }
 
@@ -131,6 +139,8 @@
       padding: 8px;
       gap: 2px;
       user-select: none;
+      touch-action: none;        /* stop touch drags from scrolling the page */
+      cursor: pointer;
     }
 
     .cell {
@@ -142,7 +152,10 @@
       font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
       font-weight: 600;
       font-size: clamp(0.75rem, calc(70vw / var(--size)), 1.4rem);
+      transition: background-color 0.15s;
     }
+    .cell.found { background: var(--found-bg); color: var(--found-text); }
+    .cell.selecting { background: var(--select-bg); color: var(--select-text); }
 
     .words {
       flex: 1 1 240px;
@@ -153,6 +166,9 @@
       border-radius: 8px;
     }
     .words h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    .words .progress { margin: -8px 0 12px; color: var(--muted); font-size: 0.875rem; }
+    .words li.found strong { text-decoration: line-through; color: var(--muted); }
+    .words li.found span { opacity: 0.6; }
     .words ul { margin: 0; padding: 0; list-style: none; }
     .words li { padding: 6px 0; border-top: 1px solid var(--border); }
     .words li:first-child { border-top: 0; }
@@ -195,6 +211,7 @@
       <div id="grid" class="grid" role="grid" aria-label="Word search grid"></div>
       <div class="words">
         <h2>Words to find</h2>
+        <p id="progress" class="progress" aria-live="polite"></p>
         <ul id="word-list"></ul>
       </div>
     </section>
@@ -207,6 +224,13 @@
     const puzzleEl = document.getElementById("puzzle");
     const gridEl = document.getElementById("grid");
     const wordListEl = document.getElementById("word-list");
+    const progressEl = document.getElementById("progress");
+
+    // Puzzle state: cells[row][col] are the grid elements; each word has
+    // {word, description, start: [row, col], end: [row, col], found, item}.
+    let cells = [];
+    let words = [];
+    let drag = null;         // {start: [row, col], path: [[row, col], ...]} while dragging
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
@@ -216,34 +240,136 @@
     function drawGrid(grid) {
       gridEl.replaceChildren();
       gridEl.style.setProperty("--size", grid.length);
+      cells = [];
 
-      for (const row of grid) {
+      grid.forEach((row, r) => {
         const rowEl = document.createElement("div");
         rowEl.setAttribute("role", "row");
         rowEl.style.display = "contents";
-        for (const letter of row) {
+        cells.push([]);
+        row.forEach((letter, c) => {
           const cell = document.createElement("div");
           cell.className = "cell";
           cell.setAttribute("role", "gridcell");
+          cell.dataset.row = r;
+          cell.dataset.col = c;
           cell.textContent = letter;
           rowEl.appendChild(cell);
-        }
+          cells[r].push(cell);
+        });
         gridEl.appendChild(rowEl);
+      });
+    }
+
+    function drawWordList(list) {
+      wordListEl.replaceChildren();
+      words = list.map((entry) => {
+        const item = document.createElement("li");
+        const wordEl = document.createElement("strong");
+        wordEl.textContent = entry.word;
+        const descEl = document.createElement("span");
+        descEl.textContent = entry.description;
+        item.append(wordEl, descEl);
+        wordListEl.appendChild(item);
+        return { ...entry, found: false, item };
+      });
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const found = words.filter((w) => w.found).length;
+      progressEl.textContent = `${found} of ${words.length} found`;
+      if (words.length && found === words.length) {
+        setStatus(`Well done! You found all ${words.length} words.`);
       }
     }
 
-    function drawWordList(words) {
-      wordListEl.replaceChildren();
-      for (const { word, description } of words) {
-        const item = document.createElement("li");
-        const wordEl = document.createElement("strong");
-        wordEl.textContent = word;
-        const descEl = document.createElement("span");
-        descEl.textContent = description;
-        item.append(wordEl, descEl);
-        wordListEl.appendChild(item);
-      }
+    // ----- Selection -----
+
+    function cellAt(x, y) {
+      const el = document.elementFromPoint(x, y);
+      const cell = el && el.closest(".cell");
+      return cell && gridEl.contains(cell) ? [Number(cell.dataset.row), Number(cell.dataset.col)] : null;
     }
+
+    // Cells in a straight line from start towards target, snapped to the nearest
+    // of the eight directions and clipped to the edge of the grid.
+    function linePath(start, target) {
+      const [r0, c0] = start;
+      const dr = target[0] - r0;
+      const dc = target[1] - c0;
+      if (dr === 0 && dc === 0) return [start];
+
+      const octant = Math.round(Math.atan2(dr, dc) / (Math.PI / 4));
+      const stepR = Math.round(Math.sin(octant * Math.PI / 4));
+      const stepC = Math.round(Math.cos(octant * Math.PI / 4));
+      const size = cells.length;
+
+      const path = [];
+      for (let i = 0; i <= Math.max(Math.abs(dr), Math.abs(dc)); i++) {
+        const r = r0 + stepR * i;
+        const c = c0 + stepC * i;
+        if (r < 0 || r >= size || c < 0 || c >= size) break;
+        path.push([r, c]);
+      }
+      return path;
+    }
+
+    function showSelection(path) {
+      gridEl.querySelectorAll(".cell.selecting").forEach((el) => el.classList.remove("selecting"));
+      for (const [r, c] of path) cells[r][c].classList.add("selecting");
+    }
+
+    function sameCell(a, b) {
+      return a[0] === b[0] && a[1] === b[1];
+    }
+
+    // The selection matches a word if its ends match the word's ends, in either order.
+    function matchWord(path) {
+      const first = path[0];
+      const last = path[path.length - 1];
+      return words.find((w) => !w.found && (
+        (sameCell(first, w.start) && sameCell(last, w.end)) ||
+        (sameCell(first, w.end) && sameCell(last, w.start))
+      ));
+    }
+
+    function markFound(entry) {
+      entry.found = true;
+      entry.item.classList.add("found");
+      for (const [r, c] of linePath(entry.start, entry.end)) cells[r][c].classList.add("found");
+      updateProgress();
+    }
+
+    gridEl.addEventListener("pointerdown", (event) => {
+      const start = cellAt(event.clientX, event.clientY);
+      if (!start || !words.length) return;
+      event.preventDefault();
+      gridEl.setPointerCapture(event.pointerId);
+      drag = { start, path: [start] };
+      showSelection(drag.path);
+    });
+
+    gridEl.addEventListener("pointermove", (event) => {
+      if (!drag) return;
+      const target = cellAt(event.clientX, event.clientY);
+      if (!target) return;
+      drag.path = linePath(drag.start, target);
+      showSelection(drag.path);
+    });
+
+    gridEl.addEventListener("pointerup", () => {
+      if (!drag) return;
+      const match = matchWord(drag.path);
+      if (match) markFound(match);
+      showSelection([]);
+      drag = null;
+    });
+
+    gridEl.addEventListener("pointercancel", () => {
+      showSelection([]);
+      drag = null;
+    });
 
     // FastAPI sends errors as {detail: "..."} for HTTPException,
     // or {detail: [{msg: "..."}]} when the request fails validation.

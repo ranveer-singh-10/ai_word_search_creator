@@ -33,7 +33,7 @@ Claude only chooses the words; all grid placement is plain Python.
 3. `generate.py` asks Claude (`DEFAULT_MODEL`, Haiku) for JSON `{"words": [{"word", "description"}]}` using structured outputs (`WORDS_SCHEMA`), validates the words (A–Z only, length fits the grid, no duplicates), places them with `grid.py`, then fills the remaining cells.
 4. `grid.py` places each word at a random start/direction, allowing overlaps only where letters match. Unplaced cells are `"."` until `fill_empty_squares`; on hard, filler is biased towards letters from the hidden words (`HARD_BIAS`) to create decoys.
 5. `wordsearch/directions.py` defines the eight `(row_step, col_step)` directions and which ones each difficulty allows (easy: right/down; medium: adds two diagonals; hard: all eight).
-6. Back in `server.py`, the validated word list (`result["words"]`) is re-checked against the finished grid with `check_word_in_grid`, so only words that are actually findable are returned. Placement can silently fail, so this filter is what guarantees the puzzle is solvable. Token usage is logged server-side only.
+6. Back in `server.py`, `find_word` locates each validated word (`result["words"]`) in the finished grid, so only words that are actually findable are returned, each with `start`/`end` `[row, col]` cells. The page uses these to check the player's click-and-drag selection (either end first). Placement can silently fail, so this filter is what guarantees the puzzle is solvable. Token usage is logged server-side only.
 
 The Anthropic client is created at import time in `generate.py`, so importing `server` or `wordsearch.generate` needs the API key present; tests should mock `wordsearch.generate.client` (or `generate_words`) rather than call the real API.
 
