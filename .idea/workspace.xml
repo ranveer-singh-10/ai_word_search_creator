@@ -17,6 +17,7 @@
     <option name="RECENT_TEMPLATES">
       <list>
         <option value="Jupyter Notebook" />
+        <option value="HTML File" />
         <option value="Python Script" />
       </list>
     </option>
@@ -47,12 +48,16 @@
   &quot;associatedIndex&quot;: 3
 }</component>
   <component name="ProjectId" id="3KTPcDLVB1TPAVNlp0QGtyhlh1Y" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "DefaultHtmlFileTemplate": "HTML File",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python tests.Python tests in test_api.py.executor": "Run",
     "Python.check_api.executor": "Run",
@@ -264,7 +269,23 @@
       <option name="project" value="LOCAL" />
       <updated>1791745993369</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="pre claude code commit">
+      <option name="closed" value="true" />
+      <created>1791746305688</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1791746305688</updated>
+    </task>
+    <task id="LOCAL-00013" summary="pre claude code commit">
+      <option name="closed" value="true" />
+      <created>1791746310090</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1791746310090</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -274,6 +295,7 @@
     <MESSAGE value="Project setup and API check" />
     <MESSAGE value="api testing" />
     <MESSAGE value="core code mostly done" />
-    <option name="LAST_COMMIT_MESSAGE" value="core code mostly done" />
+    <MESSAGE value="pre claude code commit" />
+    <option name="LAST_COMMIT_MESSAGE" value="pre claude code commit" />
   </component>
 </project>

@@ -1,7 +1,7 @@
-from sample_grids import GRID_1, GRID_2, GRID_3   # whatever names grid.py actually uses
-from directions import DIRECTIONS, ALLOWED_DIRECTIONS
+from .directions import DIRECTIONS, ALLOWED_DIRECTIONS
 import random
 import string
+
 
 EMPTY = "."
 # How often hard mode picks filler from the hidden words' letters (0 = never, 1 = always).
