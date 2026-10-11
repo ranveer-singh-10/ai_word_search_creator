@@ -1,6 +1,6 @@
 import json
 import anthropic
-import grid
+from grid import *
 
 from dotenv import load_dotenv
 
@@ -52,11 +52,11 @@ def generate_populated_wordsearch(category, size, difficulty, word_count):
 
     return {"word_list": word_list, "grid": grid, "llm_response": result}
 
-grid = generate_populated_wordsearch("Cars", 12, "hard", 10)
+result = generate_populated_wordsearch("Cars", 12, "hard", 10)
 print("------------------------------")
-print_grid(grid["grid"])
+print_grid(result["grid"])
 print("------------------------------")
-print(word_list)
+print(result["word_list"])
 print("------------------------------")
 print(result)
 
