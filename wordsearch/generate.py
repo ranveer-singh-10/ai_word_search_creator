@@ -1,4 +1,5 @@
 import json
+import logging
 import anthropic
 import string
 from .grid import generate_empty_grid, place_word_in_grid, fill_empty_squares
@@ -8,32 +9,62 @@ from dotenv import load_dotenv
 
 load_dotenv()
 client = anthropic.Anthropic()
+logger = logging.getLogger(__name__)
 
 ALLOWED_LETTERS = set(string.ascii_uppercase)
 DEFAULT_MODEL = "claude-haiku-5-5"
 
-def generate_words(category, difficulty, count=10, model = DEFAULT_MODEL):
+# The API guarantees the reply matches this schema, so there is no need to strip code fences.
+WORDS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "words": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "word": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["word", "description"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["words"],
+    "additionalProperties": False,
+}
+
+def generate_words(category, difficulty, count=10, max_length=12, model=DEFAULT_MODEL):
     system_prompt = (
-        "You generate words for word search puzzles. Easy difficulty means common words of 3–6 letters, and hard means less common words of 7–12 letters, medium means a mix of both"
-        "Respond with JSON only and include a small description for each word, no other text, in this format: "
-        '{"words": [{"word": "COMET", "description": "An icy body that develops a tail near the Sun"},    {"word": "ORBIT", "description": "The curved path of one object around another"}]}'
+        "You generate words for word search puzzles. "
+        "Easy difficulty means common words of 3–6 letters, hard means less common words of 7 letters or more, "
+        "and medium means a mix of both. "
+        "Include a short description for each word."
     )
 
     user_prompt = (
         f"Category: {category}\n"
         f"Difficulty: {difficulty}\n"
-        f"Give me {count} words. Single words only, letters A-Z, no spaces or hyphens or special characters"
+        f"Give me {count} words of at most {max_length} letters. "
+        "Single words only, letters A-Z, no spaces or hyphens or special characters."
     )
 
     response = client.messages.create(
         model=model,
-        max_tokens=1000,
+        max_tokens=4000,                       # Haiku 5.5 thinks by default, so leave room beyond the JSON
+        output_config={
+            "effort": "low",                   # a word list doesn't need deep reasoning
+            "format": {"type": "json_schema", "schema": WORDS_SCHEMA},
+        },
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
 
+    if response.stop_reason != "end_turn":
+        raise RuntimeError(f"Word generation stopped early: {response.stop_reason}")
+
     text = next(block.text for block in response.content if block.type == "text")
-    #print(response.usage)
     return {"words": json.loads(text)["words"], "usage": response.usage}
 
 
@@ -67,27 +98,24 @@ def validate_words(words, max_length, min_length=3):
 
     return valid, rejected
 
-#generate the word list and create the populated grid and return the llm response, grid and word list
+# Generate the word list, place the valid words and fill the grid.
+# Returns the validated words (with descriptions), the grid and the raw llm response.
 def generate_populated_wordsearch(category, size, difficulty, word_count):
     grid = generate_empty_grid(size)
-    easy_dirs = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
+    directions = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
 
-    result = generate_words(category, difficulty, word_count)
-
-    result = generate_words(category, difficulty, word_count)
+    result = generate_words(category, difficulty, word_count, max_length=size)
     valid, rejected = validate_words(result["words"], max_length=size)
+    if rejected:
+        logger.info("Rejected words: %s", rejected)
+
     word_list = [item["word"] for item in valid]
-
-    for word in result["words"]:
-
-        word_list.append(word["word"])
-
     for word in word_list:
-        placed = place_word_in_grid(grid, word, easy_dirs)
+        place_word_in_grid(grid, word, directions)
 
     fill_empty_squares(grid, word_list, difficulty)
 
-    return {"word_list": word_list, "grid": grid, "llm_response": result}
+    return {"words": valid, "word_list": word_list, "grid": grid, "llm_response": result}
 
 #result = generate_populated_wordsearch("Cars", 12, "hard", 10)
 #print("------------------------------")

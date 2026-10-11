@@ -51,7 +51,7 @@ def create_puzzle(req: PuzzleRequest):
     grid = result["grid"]
     directions = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
     words = [
-        item for item in result["llm_response"]["words"]
+        item for item in result["words"]
         if check_word_in_grid(grid, item["word"], directions)
     ]
     if not words:

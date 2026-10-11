@@ -301,7 +301,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791747784916</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="claude code installed and init run">
+      <option name="closed" value="true" />
+      <created>1791751787116</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1791751787116</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="TerminalProjectNonSharedOptionsProvider">
@@ -319,6 +327,7 @@
     <MESSAGE value="pre claude code commit" />
     <MESSAGE value="FastAPI backend with puzzle endpoint" />
     <MESSAGE value="ready for claude code" />
-    <option name="LAST_COMMIT_MESSAGE" value="ready for claude code" />
+    <MESSAGE value="claude code installed and init run" />
+    <option name="LAST_COMMIT_MESSAGE" value="claude code installed and init run" />
   </component>
 </project>
