@@ -81,7 +81,7 @@ def generate_words(category, difficulty, count=10, max_length=12, model=DEFAULT_
     data = json.loads(text)
     if not data["category_suitable"]:
         raise UnsuitableCategoryError(category)
-    return {"words": data["words"], "usage": response.usage}
+    return {"words": data["words"], "usage": response.usage, "stop_reason": response.stop_reason}
 
 
 # Keep only words that can go in the grid: letters A-Z only, the right length, no duplicates.
