@@ -181,7 +181,6 @@
       border: 1px solid var(--border);
       border-radius: 8px;
     }
-    .stats[hidden] { display: none; }
     .stats h2 { margin: 0 0 12px; font-size: 1.1rem; }
     .stats dl {
       display: grid;
@@ -246,20 +245,22 @@
     </section>
 
     <!-- Separate from the puzzle so it can also be shown when generation fails (failed attempts are still billed). -->
-    <section id="stats" class="stats" hidden>
-      <h2 id="stats-heading">Generation stats</h2>
+    <!-- Always shown so the running total is visible from the start; the per-attempt figures
+         (class "attempt") stay hidden until the first request to Claude. -->
+    <section id="stats" class="stats">
+      <h2 id="stats-heading">Generation cost</h2>
       <dl>
-        <div><dt>Time to generate</dt><dd id="stat-time"></dd></div>
-        <div><dt>Input tokens</dt><dd id="stat-input"></dd></div>
-        <div><dt>Output tokens</dt><dd id="stat-output"></dd></div>
-        <div><dt>Cost (US dollars)</dt><dd id="stat-cost"></dd></div>
+        <div class="attempt" hidden><dt>Time to generate</dt><dd id="stat-time"></dd></div>
+        <div class="attempt" hidden><dt>Input tokens</dt><dd id="stat-input"></dd></div>
+        <div class="attempt" hidden><dt>Output tokens</dt><dd id="stat-output"></dd></div>
+        <div class="attempt" hidden><dt>Cost (US dollars)</dt><dd id="stat-cost"></dd></div>
         <div><dt>Running total (US dollars)</dt><dd id="stat-total"></dd></div>
       </dl>
       <p class="total note">
         <span id="stat-total-count"></span>
         <button id="reset-total" type="button">Reset total</button>
       </p>
-      <p id="stat-note" class="note"></p>
+      <p id="stat-note" class="note attempt" hidden></p>
     </section>
   </main>
 
@@ -362,11 +363,13 @@
       drawTotal();
     });
 
+    drawTotal();   // show the saved total as soon as the page loads
+
     // failed: the stats are for an attempt that ended in an error (it is still billed).
     function drawStats(stats, failed = false) {
       document.getElementById("stats-heading").textContent =
         failed ? "Generation stats (failed attempt)" : "Generation stats";
-      document.getElementById("stats").hidden = false;
+      for (const el of document.querySelectorAll("#stats .attempt")) el.hidden = false;
       const count = new Intl.NumberFormat("en-GB");
       document.getElementById("stat-time").textContent = `${stats.seconds.toFixed(2)} s`;
       document.getElementById("stat-input").textContent = count.format(stats.input_tokens);
