@@ -166,7 +166,37 @@
       border-radius: 8px;
     }
     .words h2 { margin: 0 0 12px; font-size: 1.1rem; }
-    .words .progress { margin: -8px 0 12px; color: var(--muted); font-size: 0.875rem; }
+    .words .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: -8px 0 12px;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    .words .timer { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .celebrate {
+      margin: 0 0 16px;
+      padding: 12px;
+      color: var(--found-text);
+      background: var(--found-bg);
+      border-radius: 6px;
+      font-weight: 600;
+      text-align: center;
+      animation: pop 0.5s ease-out;
+    }
+    .celebrate[hidden] { display: none; }
+    @keyframes pop {
+      0% { transform: scale(0.6); opacity: 0; }
+      70% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .celebrate { animation: none; }
+    }
+
+    .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
     .words ul { margin: 0; padding: 0; list-style: none; }
     .words li { padding: 6px 0; border-top: 1px solid var(--border); }
     .words li:first-child { border-top: 0; }
@@ -238,8 +268,13 @@
     <section id="puzzle" class="puzzle" hidden>
       <div id="grid" class="grid" role="grid" aria-label="Word search grid"></div>
       <div class="words">
+        <p id="celebrate" class="celebrate" role="status" hidden></p>
         <h2 id="list-heading">Words to find</h2>
-        <p id="progress" class="progress" aria-live="polite"></p>
+        <div class="meta">
+          <span id="progress" aria-live="polite"></span>
+          <!-- Not aria-live: announcing every tick would drown out everything else. -->
+          <span id="timer" class="timer" title="Time taken"></span>
+        </div>
         <ul id="word-list"></ul>
       </div>
     </section>
@@ -274,6 +309,8 @@
     const progressEl = document.getElementById("progress");
     const listHeadingEl = document.getElementById("list-heading");
     const showSelect = document.getElementById("show");
+    const timerEl = document.getElementById("timer");
+    const celebrateEl = document.getElementById("celebrate");
 
     // Puzzle state: cells[row][col] are the grid elements; each word has
     // {word, description, start: [row, col], end: [row, col], found, item}.
@@ -312,7 +349,9 @@
 
     function drawWordList(list) {
       words = list.map((entry) => ({ ...entry, found: false, item: document.createElement("li") }));
+      celebrateEl.hidden = true;
       renderWordList();
+      startTimer();
       updateProgress();
     }
 
@@ -389,9 +428,108 @@
     function updateProgress() {
       const found = words.filter((w) => w.found).length;
       progressEl.textContent = `${found} of ${words.length} found`;
-      if (words.length && found === words.length) {
-        setStatus(`Well done! You found all ${words.length} words.`);
+      if (words.length && found === words.length) celebrate();
+    }
+
+    // ----- Timer and celebration -----
+
+    let timer = null;        // {started, interval} while a puzzle is being solved
+
+    function formatClock(ms) {
+      const seconds = Math.floor(ms / 1000);
+      return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    }
+
+    // "1 minute 5 seconds", for the celebration message.
+    function formatDuration(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      const parts = [];
+      if (m) parts.push(`${m} ${m === 1 ? "minute" : "minutes"}`);
+      if (s || !m) parts.push(`${s} ${s === 1 ? "second" : "seconds"}`);
+      return parts.join(" ");
+    }
+
+    function startTimer() {
+      stopTimer();
+      const started = performance.now();
+      timerEl.textContent = formatClock(0);
+      // Tick more often than once a second so the display never visibly skips a second.
+      const interval = setInterval(() => { timerEl.textContent = formatClock(performance.now() - started); }, 250);
+      timer = { started, interval };
+    }
+
+    // Stops the timer and returns the time taken in milliseconds.
+    function stopTimer() {
+      if (!timer) return 0;
+      clearInterval(timer.interval);
+      const elapsed = performance.now() - timer.started;
+      timer = null;
+      timerEl.textContent = formatClock(elapsed);
+      return elapsed;
+    }
+
+    function celebrate() {
+      const elapsed = stopTimer();
+      celebrateEl.textContent = `🎉 Well done! You found all ${words.length} words in ${formatDuration(elapsed)}!`;
+      celebrateEl.hidden = false;
+      launchConfetti();
+    }
+
+    // A short burst of confetti on a full-screen canvas, removed when it finishes.
+    function launchConfetti() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "confetti";
+      canvas.setAttribute("aria-hidden", "true");
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = innerWidth * ratio;
+      canvas.height = innerHeight * ratio;
+      ctx.scale(ratio, ratio);
+
+      const colours = ["#f3d27a", "#5fb39b", "#e86a5c", "#6a8fe8", "#c77de0", "#f29e4c"];
+      const pieces = Array.from({ length: 160 }, () => ({
+        x: innerWidth / 2 + (Math.random() - 0.5) * innerWidth * 0.4,
+        y: innerHeight * 0.4,
+        vx: (Math.random() - 0.5) * 14,          // pixels per frame at 60 fps
+        vy: -4 - Math.random() * 12,
+        size: 6 + Math.random() * 6,
+        angle: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 0.3,
+        colour: colours[Math.floor(Math.random() * colours.length)],
+      }));
+
+      const DURATION = 3500;   // ms; the last 800 ms fade out
+      const start = performance.now();
+      let last = start;
+
+      function frame(now) {
+        const step = Math.min((now - last) / (1000 / 60), 3);   // keep the speed the same at any frame rate
+        last = now;
+        const age = now - start;
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
+        ctx.globalAlpha = Math.max(0, Math.min(1, (DURATION - age) / 800));
+        for (const p of pieces) {
+          p.vy += 0.3 * step;
+          p.vx *= 0.99 ** step;
+          p.x += p.vx * step;
+          p.y += p.vy * step;
+          p.angle += p.spin * step;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.angle);
+          ctx.fillStyle = p.colour;
+          ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+          ctx.restore();
+        }
+        if (age < DURATION) requestAnimationFrame(frame);
+        else canvas.remove();
       }
+      requestAnimationFrame(frame);
     }
 
     // ----- Selection -----
