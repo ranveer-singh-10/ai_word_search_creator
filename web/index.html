@@ -175,12 +175,13 @@
     .words li.found { text-decoration: line-through; color: var(--muted); }
 
     .stats {
-      flex: 1 1 100%;
+      margin-top: 24px;
       padding: 16px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
     }
+    .stats[hidden] { display: none; }
     .stats h2 { margin: 0 0 12px; font-size: 1.1rem; }
     .stats dl {
       display: grid;
@@ -192,6 +193,8 @@
     .stats dt { color: var(--muted); font-size: 0.8rem; }
     .stats dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
     .stats .note { margin: 10px 0 0; color: var(--muted); font-size: 0.8rem; }
+    .stats .total { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 12px 0 0; }
+    .stats .total button { padding: 4px 10px; font-size: 0.85rem; }
   </style>
 </head>
 <body>
@@ -240,16 +243,23 @@
         <p id="progress" class="progress" aria-live="polite"></p>
         <ul id="word-list"></ul>
       </div>
-      <div class="stats">
-        <h2>Generation stats</h2>
-        <dl>
-          <div><dt>Time to generate</dt><dd id="stat-time"></dd></div>
-          <div><dt>Input tokens</dt><dd id="stat-input"></dd></div>
-          <div><dt>Output tokens</dt><dd id="stat-output"></dd></div>
-          <div><dt>Cost (US dollars)</dt><dd id="stat-cost"></dd></div>
-        </dl>
-        <p id="stat-note" class="note"></p>
-      </div>
+    </section>
+
+    <!-- Separate from the puzzle so it can also be shown when generation fails (failed attempts are still billed). -->
+    <section id="stats" class="stats" hidden>
+      <h2 id="stats-heading">Generation stats</h2>
+      <dl>
+        <div><dt>Time to generate</dt><dd id="stat-time"></dd></div>
+        <div><dt>Input tokens</dt><dd id="stat-input"></dd></div>
+        <div><dt>Output tokens</dt><dd id="stat-output"></dd></div>
+        <div><dt>Cost (US dollars)</dt><dd id="stat-cost"></dd></div>
+        <div><dt>Running total (US dollars)</dt><dd id="stat-total"></dd></div>
+      </dl>
+      <p class="total note">
+        <span id="stat-total-count"></span>
+        <button id="reset-total" type="button">Reset total</button>
+      </p>
+      <p id="stat-note" class="note"></p>
     </section>
   </main>
 
@@ -320,16 +330,57 @@
 
     showSelect.addEventListener("change", renderWordList);
 
-    function drawStats(stats) {
+    // Puzzles cost fractions of a cent, so show enough significant figures to be meaningful.
+    function formatCost(usd) {
+      if (usd === 0) return "$0.00";
+      return usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toPrecision(2)}`;
+    }
+
+    // Running total of generation cost, kept in this browser so it survives a refresh.
+    // Storage can be unavailable (e.g. private browsing), so fall back to an in-memory total.
+    const TOTAL_KEY = "wordsearch-cost-total";
+    let costTotal = { usd: 0, puzzles: 0 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(TOTAL_KEY));
+      if (saved && Number.isFinite(saved.usd) && Number.isFinite(saved.puzzles)) costTotal = saved;
+    } catch { /* keep the empty total */ }
+
+    function saveTotal() {
+      try { localStorage.setItem(TOTAL_KEY, JSON.stringify(costTotal)); } catch { /* not saved */ }
+    }
+
+    function drawTotal() {
+      document.getElementById("stat-total").textContent = formatCost(costTotal.usd);
+      const n = costTotal.puzzles;
+      document.getElementById("stat-total-count").textContent =
+        `Running total covers ${n} ${n === 1 ? "request" : "requests"} to Claude from this browser, including failed ones.`;
+    }
+
+    document.getElementById("reset-total").addEventListener("click", () => {
+      costTotal = { usd: 0, puzzles: 0 };
+      saveTotal();
+      drawTotal();
+    });
+
+    // failed: the stats are for an attempt that ended in an error (it is still billed).
+    function drawStats(stats, failed = false) {
+      document.getElementById("stats-heading").textContent =
+        failed ? "Generation stats (failed attempt)" : "Generation stats";
+      document.getElementById("stats").hidden = false;
       const count = new Intl.NumberFormat("en-GB");
       document.getElementById("stat-time").textContent = `${stats.seconds.toFixed(2)} s`;
       document.getElementById("stat-input").textContent = count.format(stats.input_tokens);
       document.getElementById("stat-output").textContent = count.format(stats.output_tokens);
-      // Puzzles cost fractions of a cent, so show enough significant figures to be meaningful.
-      document.getElementById("stat-cost").textContent =
-        stats.cost_usd >= 0.01 ? `$${stats.cost_usd.toFixed(2)}` : `$${stats.cost_usd.toPrecision(2)}`;
+      document.getElementById("stat-cost").textContent = formatCost(stats.cost_usd);
       document.getElementById("stat-note").textContent =
         `Model: ${stats.model}. Output tokens include Claude's thinking, which is billed as output.`;
+    }
+
+    // Every request that reached Claude is billed, including ones that ended in an error.
+    function addToTotal(stats) {
+      costTotal = { usd: costTotal.usd + stats.cost_usd, puzzles: costTotal.puzzles + 1 };
+      saveTotal();
+      drawTotal();
     }
 
     function updateProgress() {
@@ -461,13 +512,20 @@
         const body = await response.json().catch(() => null);
 
         if (!response.ok) {
-          setStatus(errorMessage(body, response.status), true);
+          let message = errorMessage(body, response.status);
+          if (body?.stats) {
+            drawStats(body.stats, true);
+            addToTotal(body.stats);
+            message += ` (This attempt still cost ${formatCost(body.stats.cost_usd)}, added to the running total.)`;
+          }
+          setStatus(message, true);
           return;
         }
 
         drawGrid(body.grid);
         drawWordList(body.words);
         drawStats(body.stats);
+        addToTotal(body.stats);
         puzzleEl.hidden = false;
         setStatus("");
       } catch {

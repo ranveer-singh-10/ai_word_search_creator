@@ -140,6 +140,46 @@ def test_generation_failure_returns_502(api):
     assert resp.status_code == 502
 
 
+def test_unsuitable_category_error_includes_cost(api):
+    payload = {"category_suitable": False, "words": []}
+    with patch.object(generate.client.messages, "create", return_value=fake_response(json.dumps(payload))):
+        resp = api.post("/api/puzzle", json={"category": "something nasty"})
+    assert resp.status_code == 400
+    assert resp.json()["stats"]["cost_usd"] == pytest.approx(server.puzzle_cost(USAGE))
+
+
+def test_refusal_error_includes_cost(api):
+    with patch.object(generate.client.messages, "create",
+                      return_value=fake_response("", stop_reason="refusal")):
+        resp = api.post("/api/puzzle", json={"category": "something nasty"})
+    assert resp.status_code == 400
+    assert resp.json()["stats"]["input_tokens"] == USAGE.input_tokens
+
+
+def test_cut_off_reply_error_includes_cost(api):
+    with patch.object(generate.client.messages, "create",
+                      return_value=fake_response('{"words": [', stop_reason="max_tokens")):
+        resp = api.post("/api/puzzle", json={"category": "Space"})
+    assert resp.status_code == 502
+    assert resp.json()["stats"]["output_tokens"] == USAGE.output_tokens
+
+
+def test_words_not_fitting_error_includes_cost(api):
+    with patch.object(generate, "generate_words", return_value=fake_words(
+        [{"word": "COMET", "description": "Icy body"}]
+    )), patch.object(server, "find_word", return_value=None):
+        resp = api.post("/api/puzzle", json={"category": "Space"})
+    assert resp.status_code == 500
+    assert resp.json()["stats"]["cost_usd"] == pytest.approx(server.puzzle_cost(USAGE))
+
+
+def test_failure_before_claude_replies_has_no_cost(api):
+    with patch.object(generate, "generate_words", side_effect=RuntimeError("network down")):
+        resp = api.post("/api/puzzle", json={"category": "Space"})
+    assert resp.status_code == 502
+    assert "stats" not in resp.json()
+
+
 def test_dynamic_returns_501(api):
     resp = api.post("/api/puzzle", json={"category": "Space", "dynamic": True})
     assert resp.status_code == 501

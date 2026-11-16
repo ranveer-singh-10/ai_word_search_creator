@@ -72,15 +72,20 @@ def generate_words(category, difficulty, count=10, max_length=12, model=DEFAULT_
         messages=[{"role": "user", "content": user_prompt}],
     )
 
-    if response.stop_reason == "refusal":
-        raise UnsuitableCategoryError(category)
-    if response.stop_reason != "end_turn":
-        raise RuntimeError(f"Word generation stopped early: {response.stop_reason}")
+    try:
+        if response.stop_reason == "refusal":
+            raise UnsuitableCategoryError(category)
+        if response.stop_reason != "end_turn":
+            raise RuntimeError(f"Word generation stopped early: {response.stop_reason}")
 
-    text = next(block.text for block in response.content if block.type == "text")
-    data = json.loads(text)
-    if not data["category_suitable"]:
-        raise UnsuitableCategoryError(category)
+        text = next(block.text for block in response.content if block.type == "text")
+        data = json.loads(text)
+        if not data["category_suitable"]:
+            raise UnsuitableCategoryError(category)
+    except Exception as err:
+        # The call is billed even when its reply is rejected, so let callers report the cost.
+        err.usage = response.usage
+        raise
     return {"words": data["words"], "usage": response.usage, "stop_reason": response.stop_reason}
 
 
