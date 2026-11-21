@@ -115,9 +115,42 @@ def test_failure_before_claude_replies_has_no_cost(api, fake_words):
     assert "stats" not in resp.json()
 
 
-def test_dynamic_returns_501(api):
-    resp = api.post("/api/puzzle", json={"category": "Space", "dynamic": True})
-    assert resp.status_code == 501
+def test_straight_words_include_their_path(api, fake_words):
+    fake_words.returns([{"word": "COMET", "description": "Icy body"}])
+    body = api.post("/api/puzzle", json={"category": "Space"}).json()
+    word = body["words"][0]
+    assert word["path"][0] == word["start"] and word["path"][-1] == word["end"]
+    assert "".join(body["grid"][r][c] for r, c in word["path"]) == "COMET"
+
+
+@pytest.mark.parametrize("difficulty", ["easy", "medium", "hard"])
+def test_dynamic_paths_spell_each_word(api, fake_words, difficulty):
+    fake_words.returns([{"word": w, "description": "d"} for w in ["COMET", "ORBIT", "MOON", "PLANET"]])
+    resp = api.post("/api/puzzle", json={"category": "Space", "difficulty": difficulty, "dynamic": True})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["words"]) == 4
+    for item in body["words"]:
+        path = item["path"]
+        assert "".join(body["grid"][r][c] for r, c in path) == item["word"]
+        assert item["start"] == path[0] and item["end"] == path[-1]
+        for (r0, c0), (r1, c1) in zip(path, path[1:]):
+            assert max(abs(r1 - r0), abs(c1 - c0)) == 1      # each letter touches the one before
+
+
+def test_dynamic_unsuitable_category_returns_400(api, fake_claude):
+    fake_claude.reply({"category_suitable": False, "words": []})
+    resp = api.post("/api/puzzle", json={"category": "something nasty", "dynamic": True})
+    assert resp.status_code == 400
+
+
+def test_dynamic_words_not_placed_error_includes_cost(api, fake_words, usage):
+    fake_words.returns([{"word": "COMET", "description": "Icy body"}])
+    with patch("wordsearch.dynamic.place_word_on_path", return_value=None):
+        resp = api.post("/api/puzzle", json={"category": "Space", "dynamic": True})
+    assert resp.status_code == 500
+    assert resp.json()["stats"]["cost_usd"] == pytest.approx(api_module.puzzle_cost(usage))
 
 
 def test_page_is_served(api):

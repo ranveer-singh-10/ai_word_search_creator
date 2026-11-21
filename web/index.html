@@ -111,6 +111,17 @@
       outline-offset: 2px;
     }
 
+    .travel {
+      margin: 12px 0 0;
+      padding: 10px 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .travel strong { color: var(--text); }
+
     .status { margin: 16px 0 0; color: var(--muted); }
     .status.error {
       padding: 10px 12px;
@@ -156,6 +167,7 @@
     }
     .cell.found { background: var(--found-bg); color: var(--found-text); }
     .cell.selecting { background: var(--select-bg); color: var(--select-text); }
+    .cell.selecting.end { box-shadow: inset 0 0 0 3px var(--accent); }
 
     .words {
       flex: 1 1 240px;
@@ -263,6 +275,8 @@
       <button id="submit" type="submit">Create puzzle</button>
     </form>
 
+    <p class="travel"><strong>How words travel:</strong> <span id="travel-note" aria-live="polite"></span></p>
+
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
     <section id="puzzle" class="puzzle" hidden>
@@ -313,20 +327,55 @@
     const celebrateEl = document.getElementById("celebrate");
 
     // Puzzle state: cells[row][col] are the grid elements; each word has
-    // {word, description, start: [row, col], end: [row, col], found, item}.
+    // {word, description, start: [row, col], end: [row, col], path, found, item}.
     let cells = [];
     let words = [];
-    let drag = null;         // {start: [row, col], path: [[row, col], ...]} while dragging
+    let dynamicPuzzle = false;   // whether the puzzle on screen was made in dynamic mode
+    let drag = null;         // {start: [row, col], path: [[row, col], ...]} while the pointer is down
+    let selection = [];      // dynamic mode: cells selected so far, kept between taps
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
       statusEl.classList.toggle("error", isError);
     }
 
+    // ----- How words travel -----
+    // Must match ALLOWED_DIRECTIONS (directions.py) and PATH_RULES (paths.py).
+
+    const TRAVEL_NOTES = {
+      straight: {
+        easy: "in straight lines, left to right or top to bottom.",
+        medium: "in straight lines: left to right, top to bottom, or diagonally down or up to the right.",
+        hard: "in straight lines in any of the eight directions, including backwards, upwards and diagonally.",
+      },
+      dynamic: {
+        easy: "words bend once, moving only right or down. Each straight part is at least 3 letters long, " +
+              "so words shorter than 5 letters stay straight. Drag through the letters in order, or tap them one at a time.",
+        medium: "words bend once or twice, moving right, down, or diagonally down or up to the right. " +
+                "Each straight part is at least 3 letters long, so words shorter than 5 letters stay straight. " +
+                "Drag through the letters in order, or tap them one at a time.",
+        hard: "words snake through the grid. Each letter can be in any of the eight squares touching the one " +
+              "before, so a word can change direction at every letter, but it never uses the same square twice. " +
+              "Drag through the letters in order, or tap them one at a time.",
+      },
+    };
+
+    function updateTravelNote() {
+      const mode = form.dynamic.checked ? "dynamic" : "straight";
+      const text = TRAVEL_NOTES[mode][form.difficulty.value];
+      document.getElementById("travel-note").textContent =
+        mode === "dynamic" ? `Dynamic mode: ${text}` : `Words run ${text}`;
+    }
+
+    form.difficulty.addEventListener("change", updateTravelNote);
+    form.dynamic.addEventListener("change", updateTravelNote);
+    updateTravelNote();
+
     function drawGrid(grid) {
       gridEl.replaceChildren();
       gridEl.style.setProperty("--size", grid.length);
       cells = [];
+      selection = [];
 
       grid.forEach((row, r) => {
         const rowEl = document.createElement("div");
@@ -534,10 +583,20 @@
 
     // ----- Selection -----
 
-    function cellAt(x, y) {
+    // nearCentre: only count the cell when the pointer is near its middle, so a drag that cuts
+    // across the corner where four cells meet doesn't pick up a diagonal neighbour by mistake.
+    function cellAt(x, y, nearCentre = false) {
       const el = document.elementFromPoint(x, y);
       const cell = el && el.closest(".cell");
-      return cell && gridEl.contains(cell) ? [Number(cell.dataset.row), Number(cell.dataset.col)] : null;
+      if (!cell || !gridEl.contains(cell)) return null;
+      if (nearCentre) {
+        const box = cell.getBoundingClientRect();
+        const dx = x - (box.left + box.width / 2);
+        const dy = y - (box.top + box.height / 2);
+        const radius = 0.4 * Math.min(box.width, box.height);
+        if (dx * dx + dy * dy > radius * radius) return null;
+      }
+      return [Number(cell.dataset.row), Number(cell.dataset.col)];
     }
 
     // Cells in a straight line from start towards target, snapped to the nearest
@@ -563,17 +622,63 @@
       return path;
     }
 
-    function showSelection(path) {
-      gridEl.querySelectorAll(".cell.selecting").forEach((el) => el.classList.remove("selecting"));
-      for (const [r, c] of path) cells[r][c].classList.add("selecting");
-    }
-
     function sameCell(a, b) {
       return a[0] === b[0] && a[1] === b[1];
     }
 
-    // The selection matches a word if its ends match the word's ends, in either order.
+    function samePath(a, b) {
+      return a.length === b.length && a.every((cell, i) => sameCell(cell, b[i]));
+    }
+
+    function touching(a, b) {
+      return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])) === 1;
+    }
+
+    // Dynamic mode drag: moving back onto a selected cell undoes the steps after it. If a fast
+    // drag skips cells, the gap is filled one step at a time towards the pointer, stopping
+    // before any cell that is already selected.
+    function extendPath(path, target) {
+      const existing = path.findIndex((cell) => sameCell(cell, target));
+      if (existing !== -1) return path.slice(0, existing + 1);
+
+      const next = [...path];
+      let [r, c] = next[next.length - 1];
+      while (r !== target[0] || c !== target[1]) {
+        r += Math.sign(target[0] - r);
+        c += Math.sign(target[1] - c);
+        if (next.some((cell) => sameCell(cell, [r, c]))) break;
+        next.push([r, c]);
+      }
+      return next;
+    }
+
+    // Dynamic mode tap: carry on from the current selection when the cell touches its end,
+    // go back to the cell if it is already selected, otherwise start a new selection.
+    function tapPath(path, cell) {
+      const existing = path.findIndex((p) => sameCell(p, cell));
+      if (existing !== -1) return path.slice(0, existing + 1);
+      if (path.length && touching(path[path.length - 1], cell)) return [...path, cell];
+      return [cell];
+    }
+
+    // In dynamic mode the last selected cell is outlined, to show where the next letter goes.
+    function showSelection(path) {
+      gridEl.querySelectorAll(".cell.selecting").forEach((el) => el.classList.remove("selecting", "end"));
+      path.forEach(([r, c], i) => {
+        cells[r][c].classList.add("selecting");
+        if (dynamicPuzzle && i === path.length - 1) cells[r][c].classList.add("end");
+      });
+    }
+
+    // Straight mode: the selection matches a word if its ends match the word's ends, in either order.
+    // Dynamic mode: it must follow the word's own path, from either end. (Matching on letters alone
+    // would accept a stray cell that happens to hold the same letter, and highlight the wrong cell.)
     function matchWord(path) {
+      if (!path.length) return undefined;
+      if (dynamicPuzzle) {
+        const backwards = [...path].reverse();
+        return words.find((w) => !w.found && (samePath(path, w.path) || samePath(backwards, w.path)));
+      }
       const first = path[0];
       const last = path[path.length - 1];
       return words.find((w) => !w.found && (
@@ -585,38 +690,65 @@
     function markFound(entry) {
       entry.found = true;
       entry.item.classList.add("found");
-      for (const [r, c] of linePath(entry.start, entry.end)) cells[r][c].classList.add("found");
+      for (const [r, c] of entry.path) cells[r][c].classList.add("found");
       updateProgress();
     }
 
     gridEl.addEventListener("pointerdown", (event) => {
-      const start = cellAt(event.clientX, event.clientY);
-      if (!start || !words.length) return;
+      const cell = cellAt(event.clientX, event.clientY);
+      if (!cell || !words.length) return;
       event.preventDefault();
       gridEl.setPointerCapture(event.pointerId);
-      drag = { start, path: [start] };
+      if (dynamicPuzzle) {
+        const last = selection[selection.length - 1];
+        drag = {
+          path: tapPath(selection, cell),
+          moved: false,
+          tappedEnd: last !== undefined && sameCell(last, cell),   // a tap here removes it
+        };
+      } else {
+        drag = { start: cell, path: [cell] };
+      }
       showSelection(drag.path);
     });
 
     gridEl.addEventListener("pointermove", (event) => {
       if (!drag) return;
-      const target = cellAt(event.clientX, event.clientY);
+      const target = cellAt(event.clientX, event.clientY, dynamicPuzzle);
       if (!target) return;
-      drag.path = linePath(drag.start, target);
+      if (dynamicPuzzle) {
+        if (sameCell(target, drag.path[drag.path.length - 1])) return;
+        drag.moved = true;
+        drag.path = extendPath(drag.path, target);
+      } else {
+        drag.path = linePath(drag.start, target);
+      }
       showSelection(drag.path);
     });
 
+    // A word is marked as soon as the selection matches it. In dynamic mode an unmatched
+    // selection stays, so the player can carry on tapping or dragging from it.
     gridEl.addEventListener("pointerup", () => {
       if (!drag) return;
-      const match = matchWord(drag.path);
+      let path = drag.path;
+      if (dynamicPuzzle && !drag.moved && drag.tappedEnd) path = path.slice(0, -1);
+      const match = matchWord(path);
       if (match) markFound(match);
-      showSelection([]);
+      selection = dynamicPuzzle && !match ? path : [];
+      showSelection(selection);
       drag = null;
     });
 
     gridEl.addEventListener("pointercancel", () => {
-      showSelection([]);
+      showSelection(selection);
       drag = null;
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && selection.length) {
+        selection = [];
+        showSelection(selection);
+      }
     });
 
     // FastAPI sends errors as {detail: "..."} for HTTPException,
@@ -663,6 +795,7 @@
           return;
         }
 
+        dynamicPuzzle = payload.dynamic;
         drawGrid(body.grid);
         drawWordList(body.words);
         drawStats(body.stats);

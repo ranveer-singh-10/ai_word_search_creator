@@ -11,7 +11,7 @@ I first built a word search generator by hand as my final-year project for my Co
 - **Show words or descriptions:** play with the list of words to find, or with only their descriptions as clues.
 - **Family friendly:** I see this as a tool for families and children, so words and categories that aren't appropriate are refused.
 - **Cost and timing:** each puzzle shows how long it took to generate, the tokens used and what it cost.
-- **Dynamic mode (planned):** words won't be limited to straight lines and can change direction between their first and last letter.
+- **Dynamic mode:** words aren't limited to straight lines. On easy and medium they bend once or twice; on hard they snake through the grid and can change direction at every letter. A note on the page explains how words travel for the chosen mode and difficulty.
 
 ## 2009 vs 2026
 
@@ -56,7 +56,19 @@ To deal with that, the app:
 3. The words are validated and filtered.
 4. The placement algorithm fits the words into the grid using the directions allowed at that difficulty level, overlapping only where letters match.
 5. The remaining cells are filled with random letters. On hard, the filler favours letters from the hidden words to create decoys.
-6. Each word is located in the finished grid, and only words that can be found are sent to the page with their start and end cells.
+6. Each word is located in the finished grid, and only words that can be found are sent to the page with their path of cells.
+
+### Dynamic mode
+
+| Difficulty | Style | Directions | Turns |
+|---|---|---|---|
+| Easy | Bends | right, down | exactly 1 |
+| Medium | Bends | right, down, diagonally down or up to the right | 1 or 2 |
+| Hard | Snake | any of the eight neighbouring squares | at least 1, up to every letter |
+
+With bends, each straight part is at least 3 letters long so the turn is easy to see, which means words shorter than 5 letters stay straight. No word ever uses the same square twice.
+
+Placement is a depth-first search with backtracking: from a random start, it tries the allowed directions in random order, backs up when it gets stuck, and gives up after a fixed number of steps so a crowded grid can't stall a request. On the page, the player drags through the letters or taps them one at a time, and the selection counts when it follows the word's path from either end. While dragging, a square only registers once the pointer is near its centre, so cutting across a corner doesn't pick up a diagonal neighbour by mistake.
 
 The model only chooses the words; all grid logic is plain Python, so it is deterministic and unit-tested.
 
@@ -67,7 +79,9 @@ src/wordsearch/
 ├── api.py          # FastAPI app: POST /api/puzzle and the web page
 ├── generate.py     # Claude call for the word list, then builds the puzzle
 ├── validate.py     # cleans and filters the generated words
-├── grid.py         # word placement and filler letters
+├── grid.py         # straight-line word placement and filler letters
+├── paths.py        # dynamic mode placement along bending paths
+├── dynamic.py      # builds dynamic mode puzzles
 ├── directions.py   # the eight directions and which each difficulty allows
 ├── config.py       # model, grid sizes, pricing; loads .env
 └── __main__.py     # `python -m wordsearch` starts the server
@@ -101,7 +115,7 @@ API keys are read from `.env`, which is excluded from the repository.
 pytest
 ```
 
-The tests cover word validation, grid placement, the Claude call and the API end to end. Claude is replaced by a fake client, so they run offline in under a second.
+The tests cover word validation, straight and dynamic placement rules, the Claude call and the API end to end. Claude is replaced by a fake client, so they run offline in under a second.
 
 ## Cost
 
@@ -115,7 +129,6 @@ Each puzzle makes one model call. At current pricing for Claude Haiku 5.5, that 
 
 ## Possible next steps
 
-- dynamic mode (words change direction mid-word)
 - check words against a dictionary
 - ask the model for replacements when too many words are rejected
 - multiple languages

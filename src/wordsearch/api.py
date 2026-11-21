@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field
 
 from .config import DEFAULT_MODEL, GRID_SIZE, WORD_COUNT, PRICE_PER_MILLION, WEB_DIR
 from .directions import DIRECTIONS, ALLOWED_DIRECTIONS
+from .dynamic import generate_dynamic_wordsearch
 from .generate import generate_populated_wordsearch, UnsuitableCategoryError
 from .grid import word_fits_from
+from .paths import path_spells
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -56,6 +58,30 @@ def find_word(grid, word, directions):
     return None
 
 
+def straight_placements(grid, items, difficulty):
+    """Locate each straight-line word in the finished grid; words that can't be found are dropped."""
+    directions = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
+    placed = []
+    for item in items:
+        placement = find_word(grid, item["word"], directions)
+        if placement:
+            (r0, c0), (r1, c1) = placement["start"], placement["end"]
+            last = len(item["word"]) - 1
+            step_r, step_c = (r1 - r0) // last, (c1 - c0) // last
+            path = [[r0 + step_r * i, c0 + step_c * i] for i in range(last + 1)]
+            placed.append({**item, **placement, "path": path})
+    return placed
+
+
+def dynamic_placements(grid, items):
+    """Keep dynamic words whose recorded path still spells them in the finished grid."""
+    return [
+        {**item, "start": item["path"][0], "end": item["path"][-1]}
+        for item in items
+        if path_spells(grid, item["word"], item["path"])
+    ]
+
+
 class PuzzleRequest(BaseModel):
     category: str = Field(min_length=1, max_length=50)
     difficulty: Literal["easy", "medium", "hard"] = "easy"
@@ -64,17 +90,13 @@ class PuzzleRequest(BaseModel):
 
 @app.post("/api/puzzle")
 def create_puzzle(req: PuzzleRequest):
-    if req.dynamic:
-        raise HTTPException(status_code=501, detail="Dynamic mode isn't available yet.")
-
     difficulty = req.difficulty
+    build_puzzle = generate_dynamic_wordsearch if req.dynamic else generate_populated_wordsearch
 
     # Ask Claude for words, place them and fill the grid.
     started = time.perf_counter()
     try:
-        result = generate_populated_wordsearch(
-            req.category, GRID_SIZE[difficulty], difficulty, WORD_COUNT[difficulty]
-        )
+        result = build_puzzle(req.category, GRID_SIZE[difficulty], difficulty, WORD_COUNT[difficulty])
     # Errors raised after Claude replied carry its usage, so their cost is still reported.
     except UnsuitableCategoryError as err:
         logger.info("Rejected unsuitable category: %r", req.category)
@@ -88,14 +110,12 @@ def create_puzzle(req: PuzzleRequest):
     stats = generation_stats(result["llm_response"]["usage"], started)
 
     # Only return words that really made it into the grid, so the puzzle is always solvable.
-    # Each word carries its start and end cells so the page can check the player's selection.
+    # Each word carries its start and end cells and the full path of cells between them.
     grid = result["grid"]
-    directions = [DIRECTIONS[d] for d in ALLOWED_DIRECTIONS[difficulty]]
-    words = []
-    for item in result["words"]:
-        placement = find_word(grid, item["word"], directions)
-        if placement:
-            words.append({**item, **placement})
+    if req.dynamic:
+        words = dynamic_placements(grid, result["words"])
+    else:
+        words = straight_placements(grid, result["words"], difficulty)
     if not words:
         return JSONResponse(status_code=500, content={
             "detail": "Couldn't fit the words into the grid. Please try again.", "stats": stats,
