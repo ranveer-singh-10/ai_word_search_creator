@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "ai-word-search-creator"
 version = "0.1.0"
 description = "Word search generator using the Claude API for words and Python for grid placement."
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dependencies = [
     "anthropic",
@@ -17,13 +19,17 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "httpx",      # needed by FastAPI's TestClient
     "jupyter",
     "pandas",
 ]
 
-[tool.setuptools]
-packages = ["wordsearch"]
+[project.scripts]
+wordsearch = "wordsearch.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src"]
 testpaths = ["tests"]

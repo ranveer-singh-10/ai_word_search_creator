@@ -1,7 +1,0 @@
-anthropic
-python-dotenv
-
-[dev]
-pytest
-jupyter
-pandas

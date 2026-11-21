@@ -1,6 +1,6 @@
+"""FastAPI app: POST /api/puzzle, plus the web page served from web/."""
 import logging
 import time
-from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
@@ -8,23 +8,14 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from wordsearch.generate import generate_populated_wordsearch, UnsuitableCategoryError, DEFAULT_MODEL
-from wordsearch.grid import word_fits_from
-from wordsearch.directions import DIRECTIONS, ALLOWED_DIRECTIONS
+from .config import DEFAULT_MODEL, GRID_SIZE, WORD_COUNT, PRICE_PER_MILLION, WEB_DIR
+from .directions import DIRECTIONS, ALLOWED_DIRECTIONS
+from .generate import generate_populated_wordsearch, UnsuitableCategoryError
+from .grid import word_fits_from
 
 logger = logging.getLogger("uvicorn.error")
 
-BASE_DIR = Path(__file__).resolve().parent
-
-# Grid size and word count per difficulty. Tune these as you play-test.
-GRID_SIZE = {"easy": 8, "medium": 10, "hard": 12}
-WORD_COUNT = {"easy": 8, "medium": 10, "hard": 12}
-
-# US dollars per million (input, output) tokens. Thinking tokens are billed as output.
-# Check https://www.anthropic.com/pricing if you change DEFAULT_MODEL.
-PRICE_PER_MILLION = {"claude-haiku-5-5": (0.10, 0.50)}
-
-app = FastAPI()
+app = FastAPI(title="AI Word Search Creator")
 
 
 def puzzle_cost(usage, model=DEFAULT_MODEL):
@@ -114,4 +105,4 @@ def create_puzzle(req: PuzzleRequest):
 
 
 # Serves the web page. Must come after the API routes, because "/" matches everything.
-app.mount("/", StaticFiles(directory=BASE_DIR / "web", html=True), name="web")
+app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
