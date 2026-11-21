@@ -47,3 +47,11 @@ The Anthropic client is created at import time in `generate.py`, so importing `w
 `api.py` mounts `web/` as static files at `/` **after** the API routes; new API routes must be declared above that mount or they will be shadowed.
 
 `notebooks/sample_grids.py` holds hand-made 10×10 grids and `notebooks/word_generation.ipynb` is for prompt experiments; nothing in `src/` imports from `notebooks/`.
+
+## Workflow for any feature or task
+1. **Explore**: read the relevant files first. Don't edit anything yet.
+2. **Plan**: write a short numbered plan (files to change, approach, tests).
+   Then STOP and wait for my approval.
+3. **Code**: only after I approve.
+4. **Commit**: suggest a commit message and wait. Don't run git commit
+   yourself.
