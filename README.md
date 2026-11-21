@@ -2,6 +2,8 @@
 
 A word search generator that creates a puzzle for any category. A language model chooses the words, and the grid is built according to the difficulty level selected.
 
+![A medium Space puzzle with four words found, each highlighted in its own colour](docs/screenshots/desktop.png)
+
 I first built a word search generator by hand as my final-year project for my Computer Science degree in 2009. I rebuilt it in 2026 with Claude Code to see how much AI-assisted development has changed the way software gets built, and where it still needs a person.
 
 ## Features
@@ -12,6 +14,14 @@ I first built a word search generator by hand as my final-year project for my Co
 - **Family friendly:** I see this as a tool for families and children, so words and categories that aren't appropriate are refused.
 - **Cost and timing:** each puzzle shows how long it took to generate, the tokens used and what it cost.
 - **Dynamic mode:** words aren't limited to straight lines. On easy and medium they bend once or twice; on hard they snake through the grid and can change direction at every letter. A note on the page explains how words travel for the chosen mode and difficulty.
+
+## Screenshots
+
+| Dynamic mode on hard, in dark mode | On a phone |
+|---|---|
+| <img src="docs/screenshots/dynamic-dark.png" alt="A hard dynamic puzzle in dark mode, with found words snaking through the grid" width="560"> | <img src="docs/screenshots/mobile.png" alt="The puzzle at phone width, with the grid above the word list" width="240"> |
+
+The screenshots use sample Space puzzles built with the app's own placement code; the cost figures shown are typical values rather than from a recorded run.
 
 ## 2009 vs 2026
 
@@ -88,6 +98,7 @@ src/wordsearch/
 web/index.html      # the front end (HTML, CSS and JavaScript in one file)
 tests/              # pytest suite; Claude is faked, so no API key or cost
 scripts/            # check_api.py: checks your API key works
+docs/screenshots/   # images used in this README
 notebooks/          # prompt experiments
 ```
 
