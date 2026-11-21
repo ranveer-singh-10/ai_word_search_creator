@@ -137,7 +137,7 @@ Each puzzle makes one model call. At current pricing for Claude Haiku 5.5, that 
 - AI tools are fast at the parts I found hardest in 2009, such as placement and backtracking
 - generating the content created new problems that a fixed database never had
 - the time saved went into testing and design decisions rather than writing code
-- the initial design was quite vanilla but after asking claude code to make it more modern and colourful it did an impressive job
+- the initial design was quite vanilla but after asking Claude Code to make it more modern and colourful it did an impressive job
 
 ## Possible next steps
 
